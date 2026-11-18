@@ -13,9 +13,9 @@ A partir da versão 1.7.0, o WordPress deteta as versões novas publicadas aqui 
 Para publicar uma versão nova:
 
 1. Subir a versão no cabeçalho de `td-notas.php` e na constante `TD_NOTAS_VERSAO`.
-2. Enviar o código para `main` e criar a etiqueta `vX.Y.Z` (`git tag vX.Y.Z && git push origin vX.Y.Z`).
+2. Enviar o código para o ramo `main`.
 
-O WordPress procura a etiqueta com a versão mais alta e instala o zip que o GitHub gera para ela.
+O WordPress lê a versão do `td-notas.php` que está no `main` e, se for mais alta do que a instalada, oferece a atualização. **O `main` é a versão publicada:** só se envia para lá uma versão pronta.
 
 ## Acesso
 

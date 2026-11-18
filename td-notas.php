@@ -15,7 +15,7 @@
  * Histórico de versões
  *
  * 1.7.0 (18-11-2026)
- * - Atualizações automáticas a partir do GitHub (github.com/tdpt/TD-notas, etiquetas vX.Y.Z):
+ * - Atualizações automáticas a partir do GitHub (github.com/tdpt/TD-notas, ramo main):
  *   o WordPress mostra as versões novas em Plugins e Atualizações, como nos outros plugins.
  *
  * 1.6.0 (18-11-2026)
@@ -1832,21 +1832,22 @@ add_action( 'wp_enqueue_scripts', 'td_notas_carregar_ficheiros', 20 );
  *
  * O cabeçalho "Update URI" diz ao WordPress que este plugin não vem do
  * diretório oficial: nunca é trocado por outro plugin com o mesmo nome.
- * O WordPress pergunta então a este código se há versão nova, e este
- * consulta as etiquetas de versão (tags vX.Y.Z) de github.com/tdpt/TD-notas.
+ * O WordPress pergunta então a este código se há versão nova, e este lê a
+ * versão do td-notas.php publicado no ramo main de github.com/tdpt/TD-notas.
  *
- * Para publicar uma versão: subir a versão no cabeçalho e em TD_NOTAS_VERSAO,
- * enviar o código para o GitHub e criar a etiqueta vX.Y.Z (git tag + git push).
- * O pacote é o zip que o GitHub gera para essa etiqueta.
+ * Para publicar uma versão: subir a versão no cabeçalho e em TD_NOTAS_VERSAO
+ * e enviar o código para o ramo main. O que está no main é a versão publicada:
+ * só se envia para lá uma versão pronta.
  * ---------------------------------------------------------------------- */
 
 const TD_NOTAS_GITHUB_REPO  = 'tdpt/TD-notas';
+const TD_NOTAS_GITHUB_RAMO  = 'main';
 const TD_NOTAS_GITHUB_CACHE = 'td_notas_github_versao';
 
 /**
- * Versão mais recente publicada no GitHub, guardada em cache (6 horas; 1 hora se o GitHub falhar).
+ * Versão publicada no GitHub, guardada em cache (6 horas; 1 hora se o GitHub falhar).
  *
- * @return array|null { versao, etiqueta, pacote, url }
+ * @return array|null { versao, pacote, url }
  */
 function td_notas_github_release() {
 	$cache = get_site_transient( TD_NOTAS_GITHUB_CACHE );
@@ -1856,43 +1857,34 @@ function td_notas_github_release() {
 	}
 
 	$resposta = wp_remote_get(
-		'https://api.github.com/repos/' . TD_NOTAS_GITHUB_REPO . '/tags?per_page=100',
+		'https://raw.githubusercontent.com/' . TD_NOTAS_GITHUB_REPO . '/' . TD_NOTAS_GITHUB_RAMO . '/td-notas.php',
 		array(
 			'timeout' => 10,
 			'headers' => array(
-				'Accept'     => 'application/vnd.github+json',
 				'User-Agent' => 'TD-Notas/' . TD_NOTAS_VERSAO . '; ' . home_url( '/' ),
+				'Range'      => 'bytes=0-4095', // Só o cabeçalho do ficheiro.
 			),
 		)
 	);
 
-	$melhor = null;
+	$release = null;
+	$codigo  = is_wp_error( $resposta ) ? 0 : (int) wp_remote_retrieve_response_code( $resposta );
 
-	if ( ! is_wp_error( $resposta ) && 200 === (int) wp_remote_retrieve_response_code( $resposta ) ) {
-		$etiquetas = json_decode( wp_remote_retrieve_body( $resposta ), true );
+	if ( 200 === $codigo || 206 === $codigo ) {
+		$inicio = substr( (string) wp_remote_retrieve_body( $resposta ), 0, 4096 );
 
-		foreach ( is_array( $etiquetas ) ? $etiquetas : array() as $etiqueta ) {
-			$nome = isset( $etiqueta['name'] ) ? (string) $etiqueta['name'] : '';
-
-			// Só etiquetas de versão: v1.7.0, v1.7.1…
-			if ( ! preg_match( '/^v(\d+\.\d+\.\d+)$/', $nome, $partes ) ) {
-				continue;
-			}
-
-			if ( ! $melhor || version_compare( $partes[1], $melhor['versao'], '>' ) ) {
-				$melhor = array(
-					'versao'   => $partes[1],
-					'etiqueta' => $nome,
-					'pacote'   => 'https://codeload.github.com/' . TD_NOTAS_GITHUB_REPO . '/zip/refs/tags/' . rawurlencode( $nome ),
-					'url'      => 'https://github.com/' . TD_NOTAS_GITHUB_REPO . '/tree/' . rawurlencode( $nome ),
-				);
-			}
+		if ( preg_match( '/^[ \t\/*#@]*Version:\s*(\d+\.\d+\.\d+)\s*$/mi', $inicio, $partes ) ) {
+			$release = array(
+				'versao' => $partes[1],
+				'pacote' => 'https://codeload.github.com/' . TD_NOTAS_GITHUB_REPO . '/zip/refs/heads/' . TD_NOTAS_GITHUB_RAMO,
+				'url'    => 'https://github.com/' . TD_NOTAS_GITHUB_REPO,
+			);
 		}
 	}
 
-	set_site_transient( TD_NOTAS_GITHUB_CACHE, $melhor ? $melhor : array( 'versao' => '' ), $melhor ? 6 * HOUR_IN_SECONDS : HOUR_IN_SECONDS );
+	set_site_transient( TD_NOTAS_GITHUB_CACHE, $release ? $release : array( 'versao' => '' ), $release ? 6 * HOUR_IN_SECONDS : HOUR_IN_SECONDS );
 
-	return $melhor;
+	return $release;
 }
 
 /**
@@ -1923,7 +1915,7 @@ function td_notas_github_atualizacao( $atualizacao, $dados_plugin, $ficheiro_plu
 add_filter( 'update_plugins_github.com', 'td_notas_github_atualizacao', 10, 3 );
 
 /**
- * O zip do GitHub traz a pasta com outro nome (por exemplo, TD-notas-1.7.1).
+ * O zip do GitHub traz a pasta com outro nome (por exemplo, TD-notas-main).
  * Antes de instalar, passa a chamar-se td-notas, para substituir a pasta atual
  * do plugin em vez de criar outra ao lado.
  */
