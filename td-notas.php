@@ -15,8 +15,8 @@
  * Histórico de versões
  *
  * 1.7.0 (18-11-2026)
- * - Atualizações automáticas a partir do GitHub (github.com/tdpt/TD-notas): o WordPress mostra
- *   as versões novas em Plugins e Atualizações, como nos outros plugins.
+ * - Atualizações automáticas a partir do GitHub (github.com/tdpt/TD-notas, etiquetas vX.Y.Z):
+ *   o WordPress mostra as versões novas em Plugins e Atualizações, como nos outros plugins.
  *
  * 1.6.0 (18-11-2026)
  * - O estado "Em revisão" passa a chamar-se "Para a TD rever" (o slug e as regras automáticas mantêm-se).
@@ -1833,21 +1833,20 @@ add_action( 'wp_enqueue_scripts', 'td_notas_carregar_ficheiros', 20 );
  * O cabeçalho "Update URI" diz ao WordPress que este plugin não vem do
  * diretório oficial: nunca é trocado por outro plugin com o mesmo nome.
  * O WordPress pergunta então a este código se há versão nova, e este
- * consulta a última "release" publicada em github.com/tdpt/TD-notas.
+ * consulta as etiquetas de versão (tags vX.Y.Z) de github.com/tdpt/TD-notas.
  *
  * Para publicar uma versão: subir a versão no cabeçalho e em TD_NOTAS_VERSAO,
- * e criar no GitHub uma release com a etiqueta vX.Y.Z e o anexo td-notas.zip
- * (com a pasta td-notas/ lá dentro).
+ * enviar o código para o GitHub e criar a etiqueta vX.Y.Z (git tag + git push).
+ * O pacote é o zip que o GitHub gera para essa etiqueta.
  * ---------------------------------------------------------------------- */
 
-const TD_NOTAS_GITHUB_REPO   = 'tdpt/TD-notas';
-const TD_NOTAS_GITHUB_ANEXO  = 'td-notas.zip';
-const TD_NOTAS_GITHUB_CACHE  = 'td_notas_github_release';
+const TD_NOTAS_GITHUB_REPO  = 'tdpt/TD-notas';
+const TD_NOTAS_GITHUB_CACHE = 'td_notas_github_versao';
 
 /**
- * Última release no GitHub, guardada em cache (6 horas; 1 hora se o GitHub falhar).
+ * Versão mais recente publicada no GitHub, guardada em cache (6 horas; 1 hora se o GitHub falhar).
  *
- * @return array|null { versao, pacote, url, notas, data }
+ * @return array|null { versao, etiqueta, pacote, url }
  */
 function td_notas_github_release() {
 	$cache = get_site_transient( TD_NOTAS_GITHUB_CACHE );
@@ -1857,7 +1856,7 @@ function td_notas_github_release() {
 	}
 
 	$resposta = wp_remote_get(
-		'https://api.github.com/repos/' . TD_NOTAS_GITHUB_REPO . '/releases/latest',
+		'https://api.github.com/repos/' . TD_NOTAS_GITHUB_REPO . '/tags?per_page=100',
 		array(
 			'timeout' => 10,
 			'headers' => array(
@@ -1867,41 +1866,33 @@ function td_notas_github_release() {
 		)
 	);
 
-	$release = null;
+	$melhor = null;
 
 	if ( ! is_wp_error( $resposta ) && 200 === (int) wp_remote_retrieve_response_code( $resposta ) ) {
-		$json   = json_decode( wp_remote_retrieve_body( $resposta ), true );
-		$versao = is_array( $json ) && isset( $json['tag_name'] ) ? ltrim( (string) $json['tag_name'], 'vV' ) : '';
-		$pacote = '';
+		$etiquetas = json_decode( wp_remote_retrieve_body( $resposta ), true );
 
-		// O pacote só é aceite se vier das releases deste repositório.
-		$prefixo = 'https://github.com/' . TD_NOTAS_GITHUB_REPO . '/releases/download/';
+		foreach ( is_array( $etiquetas ) ? $etiquetas : array() as $etiqueta ) {
+			$nome = isset( $etiqueta['name'] ) ? (string) $etiqueta['name'] : '';
 
-		if ( is_array( $json ) && ! empty( $json['assets'] ) && is_array( $json['assets'] ) ) {
-			foreach ( $json['assets'] as $anexo ) {
-				$url = isset( $anexo['browser_download_url'] ) ? (string) $anexo['browser_download_url'] : '';
-
-				if ( isset( $anexo['name'] ) && TD_NOTAS_GITHUB_ANEXO === $anexo['name'] && 0 === stripos( $url, $prefixo ) ) {
-					$pacote = $url;
-					break;
-				}
+			// Só etiquetas de versão: v1.7.0, v1.7.1…
+			if ( ! preg_match( '/^v(\d+\.\d+\.\d+)$/', $nome, $partes ) ) {
+				continue;
 			}
-		}
 
-		if ( preg_match( '/^\d+(\.\d+){1,3}$/', $versao ) && '' !== $pacote ) {
-			$release = array(
-				'versao' => $versao,
-				'pacote' => esc_url_raw( $pacote ),
-				'url'    => esc_url_raw( isset( $json['html_url'] ) ? $json['html_url'] : 'https://github.com/' . TD_NOTAS_GITHUB_REPO ),
-				'notas'  => isset( $json['body'] ) ? (string) $json['body'] : '',
-				'data'   => isset( $json['published_at'] ) ? (string) $json['published_at'] : '',
-			);
+			if ( ! $melhor || version_compare( $partes[1], $melhor['versao'], '>' ) ) {
+				$melhor = array(
+					'versao'   => $partes[1],
+					'etiqueta' => $nome,
+					'pacote'   => 'https://codeload.github.com/' . TD_NOTAS_GITHUB_REPO . '/zip/refs/tags/' . rawurlencode( $nome ),
+					'url'      => 'https://github.com/' . TD_NOTAS_GITHUB_REPO . '/tree/' . rawurlencode( $nome ),
+				);
+			}
 		}
 	}
 
-	set_site_transient( TD_NOTAS_GITHUB_CACHE, $release ? $release : array( 'versao' => '' ), $release ? 6 * HOUR_IN_SECONDS : HOUR_IN_SECONDS );
+	set_site_transient( TD_NOTAS_GITHUB_CACHE, $melhor ? $melhor : array( 'versao' => '' ), $melhor ? 6 * HOUR_IN_SECONDS : HOUR_IN_SECONDS );
 
-	return $release;
+	return $melhor;
 }
 
 /**
@@ -1932,6 +1923,32 @@ function td_notas_github_atualizacao( $atualizacao, $dados_plugin, $ficheiro_plu
 add_filter( 'update_plugins_github.com', 'td_notas_github_atualizacao', 10, 3 );
 
 /**
+ * O zip do GitHub traz a pasta com outro nome (por exemplo, TD-notas-1.7.1).
+ * Antes de instalar, passa a chamar-se td-notas, para substituir a pasta atual
+ * do plugin em vez de criar outra ao lado.
+ */
+function td_notas_github_nome_pasta( $origem, $origem_remota, $instalador, $extra = array() ) {
+	if ( empty( $extra['plugin'] ) || plugin_basename( __FILE__ ) !== $extra['plugin'] ) {
+		return $origem;
+	}
+
+	global $wp_filesystem;
+
+	$destino = trailingslashit( $origem_remota ) . dirname( plugin_basename( __FILE__ ) ) . '/';
+
+	if ( untrailingslashit( $origem ) === untrailingslashit( $destino ) ) {
+		return $origem;
+	}
+
+	if ( $wp_filesystem && $wp_filesystem->move( untrailingslashit( $origem ), untrailingslashit( $destino ), true ) ) {
+		return $destino;
+	}
+
+	return new WP_Error( 'td_notas_pasta', 'Não foi possível preparar a pasta do TD Notas para a atualização.' );
+}
+add_filter( 'upgrader_source_selection', 'td_notas_github_nome_pasta', 10, 4 );
+
+/**
  * Janela "Ver detalhes da versão" no ecrã de Plugins/Atualizações.
  */
 function td_notas_github_detalhes( $resultado, $acao, $args ) {
@@ -1940,7 +1957,6 @@ function td_notas_github_detalhes( $resultado, $acao, $args ) {
 	}
 
 	$release = td_notas_github_release();
-	$notas   = $release && '' !== trim( $release['notas'] ) ? $release['notas'] : 'Ver o histórico de versões no início do ficheiro td-notas.php.';
 
 	return (object) array(
 		'name'          => 'TD Notas',
@@ -1950,10 +1966,9 @@ function td_notas_github_detalhes( $resultado, $acao, $args ) {
 		'homepage'      => 'https://github.com/' . TD_NOTAS_GITHUB_REPO,
 		'requires'      => '6.0',
 		'requires_php'  => '7.4',
-		'last_updated'  => $release ? $release['data'] : '',
 		'download_link' => $release ? $release['pacote'] : '',
 		'sections'      => array(
-			'changelog' => '<p>' . nl2br( esc_html( $notas ) ) . '</p>',
+			'changelog' => '<p>O histórico de versões está no início do ficheiro td-notas.php, no <a href="' . esc_url( 'https://github.com/' . TD_NOTAS_GITHUB_REPO ) . '" target="_blank" rel="noopener">repositório do GitHub</a>.</p>',
 		),
 	);
 }
