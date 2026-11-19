@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       TD Notas
  * Description:       Notas visuais sobre os elementos das páginas, para rondas de correções em sites em desenvolvimento.
- * Version:           1.7.0
+ * Version:           1.7.1
  * Author:            Tecla Digital
  * Author URI:        https://tecladigital.pt
  * Update URI:        https://github.com/tdpt/TD-notas
@@ -13,6 +13,9 @@
 
 /*
  * Histórico de versões
+ *
+ * 1.7.1 (19-11-2026)
+ * - Backoffice: a coluna Respostas mostra também a data da última mensagem.
  *
  * 1.7.0 (18-11-2026)
  * - Atualizações automáticas a partir do GitHub (github.com/tdpt/TD-notas, ramo main):
@@ -72,7 +75,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-const TD_NOTAS_VERSAO    = '1.7.0';
+const TD_NOTAS_VERSAO    = '1.7.1';
 const TD_NOTAS_CAP       = 'td_notas';            // Capacidade para usar as notas no site.
 const TD_NOTAS_CAP_ADMIN = 'manage_options';      // Capacidade para gerir as notas no backoffice.
 const TD_NOTAS_CPT       = 'td_nota';
@@ -677,6 +680,9 @@ function td_notas_coluna_conteudo( $coluna, $nota_id ) {
 		if ( td_notas_tem_anexos( $nota_id ) ) {
 			echo ' <span class="dashicons dashicons-paperclip" title="Tem anexos" style="font-size:16px;width:16px;height:16px;vertical-align:text-bottom;color:#646970;"></span>';
 		}
+
+		// Data da última mensagem (resposta ou, sem respostas, a própria nota).
+		echo '<br><span class="description">' . esc_html( td_notas_data( $ultima['data'] ) ) . '</span>';
 	}
 }
 add_action( 'manage_' . TD_NOTAS_CPT . '_posts_custom_column', 'td_notas_coluna_conteudo', 10, 2 );
